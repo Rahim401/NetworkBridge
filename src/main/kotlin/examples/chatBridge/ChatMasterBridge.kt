@@ -1,13 +1,19 @@
-import BridgeCore.Bridge
-import BridgeCore.appPort
-import BridgeCore.listenConnectTimeout
+package examples.chatBridge
+
+import bridgeCore.ChatBridge
+import bridgeCore.appPort
+import bridgeCore.listenConnectTimeout
+import examples.BridgeState
+import examples.InitializeCode
+import getLong
+import writeData
 import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.net.*
 import java.util.concurrent.TimeoutException
 import kotlin.concurrent.thread
 
-class MasterBridge: Bridge() {
+class ChatMasterBridge: ChatBridge() {
     var currentState = BridgeState.Idle
         private set
 
@@ -16,19 +22,15 @@ class MasterBridge: Bridge() {
     override var outLane: DataOutputStream? = null
 
     val isConnected:Boolean
-        get() = currentState==BridgeState.Connected
+        get() = currentState == BridgeState.Connected
     private val workerAddr: SocketAddress?
         get() = mainSkLane?.remoteSocketAddress
-
-    //How much ms we ahead or they behind
     private var deviceTimeDiff = 0L
 
 
     override fun setInStreamTimeout(timeout: Long) {
         mainSkLane?.soTimeout = timeout.toInt()
     }
-    override fun getSignalSize(signal: Byte): Int = -1
-    override fun handleSignal(signal: Byte, size: Int, buffer: ByteArray) {}
 
     fun connectTo(addr: String) {
         if(currentState != BridgeState.Idle) return
@@ -69,7 +71,6 @@ class MasterBridge: Bridge() {
         mainSkLane?.close(); mainSkLane = null; inLane = null; outLane = null
         currentState = BridgeState.Idle
     }
-
     fun disconnect(){
         if(currentState == BridgeState.Connected || currentState == BridgeState.Connecting) {
             currentState = BridgeState.Disconnecting
@@ -79,9 +80,10 @@ class MasterBridge: Bridge() {
 }
 
 fun main() {
-    val mb = MasterBridge()
+    val mb = ChatMasterBridge()
     mb.connectTo("localhost")
-    while (!mb.isConnected) Thread.sleep(1)
-    Thread.sleep(10000)
+    while (!mb.isConnected) Thread.sleep(100)
+    thread { ChatBridge.chatReceiver(mb, "Worker"); }
+    ChatBridge.chatSender(mb); mb.disconnect()
     mb.disconnect()
 }

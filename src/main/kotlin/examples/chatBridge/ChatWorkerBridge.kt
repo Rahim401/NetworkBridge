@@ -1,19 +1,21 @@
-import BridgeCore.Bridge
-import BridgeCore.appPort
-import BridgeCore.listenConnectTimeout
+package examples.chatBridge
+
+import bridgeCore.ChatBridge
+import bridgeCore.ChatBridge.Companion.chatReceiver
+import bridgeCore.ChatBridge.Companion.chatSender
+import bridgeCore.appPort
+import bridgeCore.listenConnectTimeout
+import examples.BridgeState
+import examples.InitializeCode
+import getLong
+import getShort
+import writeData
 import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.net.*
+import kotlin.concurrent.thread
 
-
-enum class BridgeState {
-    Idle, StartingListen, Listening,
-    Connecting, Connected,
-    Disconnecting, StopingListen
-}
-const val InitializeCode = 45.toByte()
-
-class WorkerBridge: Bridge() {
+class ChatWorkerBridge: ChatBridge() {
     var currentState = BridgeState.Idle
         private set
 
@@ -26,16 +28,11 @@ class WorkerBridge: Bridge() {
         get() = currentState==BridgeState.Connected
     private val masterAddr: SocketAddress?
         get() = mainSkLane?.remoteSocketAddress
-
-    //How much ms we ahead or they behind
     private var deviceTimeDiff = 0L
-
 
     override fun setInStreamTimeout(timeout: Long) {
         mainSkLane?.soTimeout = timeout.toInt()
     }
-    override fun getSignalSize(signal: Byte): Int = -1
-    override fun handleSignal(signal: Byte, size: Int, buffer: ByteArray) {}
 
     fun startListening() {
         if(currentState != BridgeState.Idle) return
@@ -83,8 +80,7 @@ class WorkerBridge: Bridge() {
         mainSkLane?.close(); mainSkLane = null; inLane = null; outLane = null
         if(currentState != BridgeState.StopingListen) currentState = BridgeState.Listening
     }
-
-    private fun disconnect(){
+    fun disconnect(){
         if(currentState == BridgeState.Connected || currentState == BridgeState.Connecting) {
             currentState = BridgeState.Disconnecting
             stopBridgeLooper()
@@ -99,6 +95,14 @@ class WorkerBridge: Bridge() {
 }
 
 fun main() {
-    val wb = WorkerBridge()
+    val wb = ChatWorkerBridge()
+    thread {
+        repeat(10) {
+            while (!wb.isConnected) Thread.sleep(100)
+            thread { chatReceiver(wb, "Master"); }
+            chatSender(wb); wb.disconnect()
+            while (wb.isConnected) Thread.sleep(100)
+        }
+    }
     wb.startListening()
 }

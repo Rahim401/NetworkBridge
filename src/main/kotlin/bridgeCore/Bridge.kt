@@ -1,4 +1,4 @@
-package BridgeCore
+package bridgeCore
 
 import java.io.DataInputStream
 import java.io.DataOutputStream
@@ -14,7 +14,7 @@ abstract class Bridge {
     abstract fun setInStreamTimeout(timeout:Long)
 
     abstract fun getSignalSize(signal:Byte): Int
-    abstract fun handleSignal(signal:Byte, size:Int, buffer:ByteArray)
+    abstract fun handleSignal(signal:Byte, bf:ByteArray , size:Int)
 
     var confBeatInter = defaultBeatInterval
     var confBeatInterBy4 = confBeatInter / 4
@@ -46,15 +46,14 @@ abstract class Bridge {
                 nextSBeatAt = timeNow
                 nextRBeatAt = timeNow + confBeatInter
 
-                var currentSignal:Byte = -1;
+                var currentSignal:Byte = -1
                 var currentReadState = 0; var dataSize = 0; var dataToRead = 0
                 val dataBuf = ByteArray(4096)
 
                 while (isBridgeAlive) {
                     try {
                         if (currentReadState == 0) {
-                            val maskedSignal = inLane!!.read()
-                            currentSignal = (maskedSignal and 15).toByte()
+                            currentSignal = inLane!!.read().toByte()
                             currentReadState = 1
                         }
 
@@ -94,10 +93,7 @@ abstract class Bridge {
                                 stoppedBecauseOf = StoppedByPeer // Because of Peer Stop
                                 break
                             }
-                            else -> handleSignal(
-                                currentSignal,
-                                dataSize, dataBuf
-                            )
+                            else -> handleSignal(currentSignal, dataBuf, dataSize)
                         }
                         currentReadState = 0
                     }

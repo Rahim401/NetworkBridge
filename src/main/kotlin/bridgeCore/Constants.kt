@@ -1,4 +1,4 @@
-package BridgeCore
+package bridgeCore
 
 const val appPort = 43811
 const val listenConnectTimeout = 5000
