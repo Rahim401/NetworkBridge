@@ -3,8 +3,8 @@ package examples.chatBridge
 import bridgeCore.ChatBridge
 import bridgeCore.ChatBridge.Companion.chatReceiver
 import bridgeCore.ChatBridge.Companion.chatSender
-import bridgeCore.appPort
-import bridgeCore.listenConnectTimeout
+import examples.appPort
+import examples.listenConnectTimeout
 import examples.BridgeState
 import examples.InitializeCode
 import getLong
@@ -12,26 +12,28 @@ import getShort
 import writeData
 import java.io.DataInputStream
 import java.io.DataOutputStream
+import java.io.InputStream
+import java.io.OutputStream
 import java.net.*
 import kotlin.concurrent.thread
 
-class ChatWorkerBridge: ChatBridge() {
+class WorkerBridge: ChatBridge() {
     var currentState = BridgeState.Idle
         private set
 
-    private val skLaneMaker = ServerSocket(appPort)
-    private var mainSkLane: Socket? = null
-    override var inLane: DataInputStream? = null
-    override var outLane: DataOutputStream? = null
+    private val socketMaker = ServerSocket(appPort)
+    private var mainSocket: Socket? = null
+    override var inStream: InputStream? = null
+    override var outStream: OutputStream? = null
 
     val isConnected:Boolean
         get() = currentState==BridgeState.Connected
     private val masterAddr: SocketAddress?
-        get() = mainSkLane?.remoteSocketAddress
+        get() = mainSocket?.remoteSocketAddress
     private var deviceTimeDiff = 0L
 
-    override fun setInStreamTimeout(timeout: Long) {
-        mainSkLane?.soTimeout = timeout.toInt()
+    override fun setTimeout(timeout: Long) {
+        mainSocket?.soTimeout = timeout.toInt()
     }
 
     fun startListening() {
@@ -39,7 +41,7 @@ class ChatWorkerBridge: ChatBridge() {
 
         currentState = BridgeState.StartingListen
         try {
-            skLaneMaker.soTimeout = listenConnectTimeout
+            socketMaker.soTimeout = listenConnectTimeout
             currentState = BridgeState.Listening
             println("Started Listening")
             while (currentState == BridgeState.Listening)
@@ -52,19 +54,19 @@ class ChatWorkerBridge: ChatBridge() {
         if(currentState!=BridgeState.Listening) return
 
         try {
-            mainSkLane = skLaneMaker.accept()
+            mainSocket = socketMaker.accept()
             currentState = BridgeState.Connecting
-            if (mainSkLane!!.isConnected) {
-                inLane = DataInputStream(mainSkLane!!.getInputStream())
-                outLane = DataOutputStream(mainSkLane!!.getOutputStream())
+            if (mainSocket!!.isConnected) {
+                inStream = DataInputStream(mainSocket!!.getInputStream())
+                outStream = DataOutputStream(mainSocket!!.getOutputStream())
 
-                val connReq = inLane!!.readNBytes(12)
+                val connReq = inStream!!.readNBytes(12)
                 val requestAt = System.currentTimeMillis()
                 if (connReq.size == 12 && connReq[0] == InitializeCode && connReq[1] == 0.toByte()) {
                     updateConfInters(connReq.getShort(2).toLong())
                     deviceTimeDiff = requestAt - connReq.getLong(4)
 
-                    sendData { outLane!!.writeData(InitializeCode, 1.toByte(), System.currentTimeMillis()) }
+                    sendData { writeData(InitializeCode, 1.toByte(), System.currentTimeMillis()) }
                     if(currentState == BridgeState.Connecting) {
                         currentState = BridgeState.Connected
                         println("\nConnected to Master($masterAddr)")
@@ -77,7 +79,7 @@ class ChatWorkerBridge: ChatBridge() {
         catch (e: SocketException){ e.printStackTrace() }
         catch (e: SocketTimeoutException) {}
 
-        mainSkLane?.close(); mainSkLane = null; inLane = null; outLane = null
+        mainSocket?.close(); mainSocket = null; inStream = null; outStream = null
         if(currentState != BridgeState.StopingListen) currentState = BridgeState.Listening
     }
     fun disconnect(){
@@ -95,7 +97,7 @@ class ChatWorkerBridge: ChatBridge() {
 }
 
 fun main() {
-    val wb = ChatWorkerBridge()
+    val wb = WorkerBridge()
     thread {
         repeat(10) {
             while (!wb.isConnected) Thread.sleep(100)

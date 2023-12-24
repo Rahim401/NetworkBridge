@@ -1,16 +1,12 @@
-import java.io.DataOutputStream
-import java.io.InputStream
-import java.io.OutputStream
-import java.net.Socket
+import java.io.*
 import java.nio.ByteBuffer
 import kotlin.math.min
-import java.io.IOException
 
 
-fun DataOutputStream.writeData(vararg dataLst:Any){
+fun OutputStream.writeData(vararg dataLst:Any) {
     dataLst.forEach { data ->
         when (data) {
-            is Byte -> writeByte(data.toInt())
+            is Byte -> write(data.toInt())
             is Short -> writeShort(data.toInt())
             is Int -> writeInt(data)
             is Long -> writeLong(data)
@@ -21,6 +17,36 @@ fun DataOutputStream.writeData(vararg dataLst:Any){
         }
     }
 }
+
+fun OutputStream.writeShort(value: Int) {
+    write(value shr 8); write(value)
+}
+fun OutputStream.writeInt(value: Int) {
+    write(value shr 24); write(value shr 16)
+    write(value shr 8); write(value)
+}
+fun OutputStream.writeLong(value: Long) {
+    writeInt((value shr 32).toInt())
+    writeInt(value.toInt())
+}
+fun OutputStream.writeFloat(value: Float) = writeInt(value.toBits())
+fun OutputStream.writeDouble(value: Double) = writeLong(value.toBits())
+fun OutputStream.writeUTF(value: String) {
+    val encodedString = value.encodeToByteArray()
+    if (encodedString.size < 65535) {
+        writeShort(encodedString.size)
+        write(encodedString)
+    }
+}
+
+fun InputStream.readByte() = read().toByte()
+fun InputStream.readUShort() = read().shl(8).or(read())
+fun InputStream.readShort() = read().shl(8).or(read()).toShort()
+fun InputStream.readInt() = readUShort().shl(16).or(readUShort())
+fun InputStream.readLong() = readInt().toLong().shl(32).or(readInt().toLong())
+fun InputStream.readFloat() = Float.fromBits(readInt())
+fun InputStream.readDouble() = Double.fromBits(readLong())
+fun InputStream.readUTF() = readNBytes(readUShort()).decodeToString()
 
 fun Byte.toPInt() = toInt() and 0xFF
 fun ByteArray.putBytes(vararg vls:Byte, from:Int=0): ByteArray{

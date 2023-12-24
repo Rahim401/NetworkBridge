@@ -56,7 +56,7 @@ abstract class ChatBridge: RequestBridge() {
         return Pair(replayId,retrieveResponse(replayId)?.getSString())
     }
 
-    protected fun clearMessages() {
+    private fun clearMessages() {
         messageIdList.clear()
         clearRequests(); clearResponse()
         messageLock.withLock { messageCondition.signalAll() }

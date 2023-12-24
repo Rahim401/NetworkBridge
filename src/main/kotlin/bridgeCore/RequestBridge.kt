@@ -1,6 +1,8 @@
 package bridgeCore
 
-import java.net.SocketException
+import readUShort
+import writeShort
+import java.io.IOException
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
 
@@ -48,8 +50,8 @@ abstract class RequestBridge: Bridge() {
 
     override fun getSignalSize(signal: Byte): Int {
         return when(signal) {
-            RqByteSignal,ResByteSignal -> inLane!!.read()
-            RqShortSignal,ResShortSignal -> inLane!!.readUnsignedShort()
+            RqByteSignal,ResByteSignal -> inStream!!.read()
+            RqShortSignal,ResShortSignal -> inStream!!.readUShort()
             else -> -1
         }
     }
@@ -96,17 +98,17 @@ abstract class RequestBridge: Bridge() {
             sendData {
                 val dataSecSize = len + extraSignalSize
                 if (dataSecSize < 256) {
-                    outLane!!.write(RqByteSignal.toInt())
-                    outLane!!.write(dataSecSize)
+                    outStream!!.write(RqByteSignal.toInt())
+                    outStream!!.write(dataSecSize)
                 } else {
-                    outLane!!.write(RqShortSignal.toInt())
-                    outLane!!.writeShort(dataSecSize)
+                    outStream!!.write(RqShortSignal.toInt())
+                    outStream!!.writeShort(dataSecSize)
                 }
-                outLane!!.write(reqId)
-                outLane!!.write(bf, off, len)
+                outStream!!.write(reqId)
+                outStream!!.write(bf, off, len)
             }
         }
-        catch (_: SocketException){
+        catch (_: IOException){
             responseMapLock.withLock {
                 responseMap.remove(reqId)
                 responseMapCondition.signalAll()
@@ -120,17 +122,17 @@ abstract class RequestBridge: Bridge() {
             sendData {
                 val dataSecSize = len + extraSignalSize
                 if (dataSecSize < 256) {
-                    outLane!!.write(RqByteSignal.toInt())
-                    outLane!!.write(dataSecSize)
+                    outStream!!.write(RqByteSignal.toInt())
+                    outStream!!.write(dataSecSize)
                 } else {
-                    outLane!!.write(RqShortSignal.toInt())
-                    outLane!!.writeShort(dataSecSize)
+                    outStream!!.write(RqShortSignal.toInt())
+                    outStream!!.writeShort(dataSecSize)
                 }
-                outLane!!.write(forReqId)
-                outLane!!.write(bf, off, len)
+                outStream!!.write(forReqId)
+                outStream!!.write(bf, off, len)
             }
         }
-        catch (e: SocketException){ e.printStackTrace() }
+        catch (e: IOException){ e.printStackTrace() }
     }
 
     fun retrieveRequest(reqId:Int, canWaitFor:Long=1000000000):ByteArray? {

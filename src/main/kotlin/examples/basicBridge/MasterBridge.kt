@@ -1,14 +1,16 @@
 package examples.basicBridge
 
 import bridgeCore.Bridge
-import bridgeCore.appPort
-import bridgeCore.listenConnectTimeout
 import examples.BridgeState
 import examples.InitializeCode
+import examples.appPort
+import examples.listenConnectTimeout
 import getLong
 import writeData
 import java.io.DataInputStream
 import java.io.DataOutputStream
+import java.io.InputStream
+import java.io.OutputStream
 import java.net.*
 import java.util.concurrent.TimeoutException
 import kotlin.concurrent.thread
@@ -17,19 +19,19 @@ class MasterBridge: Bridge() {
     var currentState = BridgeState.Idle
         private set
 
-    private var mainSkLane: Socket? = null
-    override var inLane: DataInputStream? = null
-    override var outLane: DataOutputStream? = null
+    private var mainSocket: Socket? = null
+    override var inStream: InputStream? = null
+    override var outStream: OutputStream? = null
 
     val isConnected:Boolean
         get() = currentState==BridgeState.Connected
     private val workerAddr: SocketAddress?
-        get() = mainSkLane?.remoteSocketAddress
+        get() = mainSocket?.remoteSocketAddress
     private var deviceTimeDiff = 0L
 
 
-    override fun setInStreamTimeout(timeout: Long) {
-        mainSkLane?.soTimeout = timeout.toInt()
+    override fun setTimeout(timeout: Long) {
+        mainSocket?.soTimeout = timeout.toInt()
     }
     override fun getSignalSize(signal: Byte): Int = -1
     override fun handleSignal(signal: Byte, bf: ByteArray, size: Int) {}
@@ -39,16 +41,16 @@ class MasterBridge: Bridge() {
 
         currentState = BridgeState.Connecting
         try {
-            mainSkLane = Socket()
-            mainSkLane!!.soTimeout = listenConnectTimeout
-            mainSkLane!!.connect(InetSocketAddress(addr,appPort))
+            mainSocket = Socket()
+            mainSocket!!.soTimeout = listenConnectTimeout
+            mainSocket!!.connect(InetSocketAddress(addr,appPort))
 
-            if(mainSkLane!!.isConnected){
-                inLane = DataInputStream(mainSkLane!!.getInputStream())
-                outLane = DataOutputStream(mainSkLane!!.getOutputStream())
+            if(mainSocket!!.isConnected){
+                inStream = DataInputStream(mainSocket!!.getInputStream())
+                outStream = DataOutputStream(mainSocket!!.getOutputStream())
 
-                sendData { outLane!!.writeData(InitializeCode, 0.toByte(), confBeatInter.toShort(), System.currentTimeMillis()) }
-                val connRes = inLane!!.readNBytes(10)
+                sendData { writeData(InitializeCode, 0.toByte(), confBeatInter.toShort(), System.currentTimeMillis()) }
+                val connRes = inStream!!.readNBytes(10)
                 val responseAt = System.currentTimeMillis()
                 if(connRes.size == 10 && connRes[0] == InitializeCode && connRes[1] == 1.toByte()){
                     deviceTimeDiff = responseAt - connRes.getLong(2)
@@ -60,7 +62,7 @@ class MasterBridge: Bridge() {
                             val becauseOf = startBridgeLooper()
                             println("Disconnected Because Of $becauseOf")
                         }
-                        mainSkLane?.close(); mainSkLane = null; inLane = null; outLane = null
+                        mainSocket?.close(); mainSocket = null; inStream = null; outStream = null
                         currentState = BridgeState.Idle
                     }
                     return
@@ -70,7 +72,7 @@ class MasterBridge: Bridge() {
         catch (e: ConnectException) { throw TimeoutException("No worker on Ip $addr").initCause(e) }
         catch (e: SocketTimeoutException) { e.printStackTrace(); throw TimeoutException("No worker on Ip $addr") }
         catch (e: SocketException){ e.printStackTrace() }
-        mainSkLane?.close(); mainSkLane = null; inLane = null; outLane = null
+        mainSocket?.close(); mainSocket = null; inStream = null; outStream = null
         currentState = BridgeState.Idle
     }
 
