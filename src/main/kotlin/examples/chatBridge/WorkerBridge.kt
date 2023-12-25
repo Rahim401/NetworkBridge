@@ -1,8 +1,7 @@
 package examples.chatBridge
 
-import bridgeCore.ChatBridge
-import bridgeCore.ChatBridge.Companion.chatReceiver
-import bridgeCore.ChatBridge.Companion.chatSender
+import examples.chatBridge.ChatBridge.Companion.chatReceiver
+import examples.chatBridge.ChatBridge.Companion.chatSender
 import examples.appPort
 import examples.listenConnectTimeout
 import examples.BridgeState

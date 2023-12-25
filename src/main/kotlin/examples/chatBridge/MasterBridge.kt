@@ -1,6 +1,5 @@
 package examples.chatBridge
 
-import bridgeCore.ChatBridge
 import examples.appPort
 import examples.listenConnectTimeout
 import examples.BridgeState

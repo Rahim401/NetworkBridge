@@ -1,5 +1,6 @@
-package bridgeCore
+package examples.chatBridge
 
+import bridgeCore.RequestBridge
 import getSString
 import putSString
 import java.util.*
@@ -70,7 +71,7 @@ abstract class ChatBridge: RequestBridge() {
     }
 
     companion object{
-        fun chatSender(brg:ChatBridge){
+        fun chatSender(brg: ChatBridge){
             val screenReader = Scanner(System.`in`)
             val msgBuffer = ByteArray(1000)
             while(brg.isBridgeAlive){
@@ -85,7 +86,7 @@ abstract class ChatBridge: RequestBridge() {
             }
         }
 
-        fun chatReceiver(brg:ChatBridge, fromName:String){
+        fun chatReceiver(brg: ChatBridge, fromName:String){
             while(brg.isBridgeAlive){
                 val (_,msg) = brg.getAvailableMessage()
                 if(msg!=null){
