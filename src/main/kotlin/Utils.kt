@@ -116,9 +116,9 @@ fun ByteArray.pad(idx: Int=0,length:Int):ByteArray {
 
 fun ByteArray.getBInt(idx: Int) = get(idx).toInt().and(0xFF)
 fun ByteArray.getBLong(idx: Int) = get(idx).toLong().and(0xFF)
-fun ByteArray.getShort(idx:Int=0):Short = getBInt(idx).shl(8)
-        .or(getBInt(idx+1))
-        .toShort()
+fun ByteArray.getUShort(idx:Int=0):Int =
+    getBInt(idx).shl(8).or(getBInt(idx+1))
+fun ByteArray.getShort(idx:Int=0):Short = getUShort(idx).toShort()
 fun ByteArray.getInt(idx:Int=0):Int = getBInt(idx).shl(24)
         .or(getBInt(idx+1).shl(16))
         .or(getBInt(idx+2).shl(8))
