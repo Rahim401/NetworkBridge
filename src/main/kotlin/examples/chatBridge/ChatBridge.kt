@@ -12,9 +12,9 @@ abstract class ChatBridge: RequestBridge() {
     private val messageLock = ReentrantLock()
     private val messageCondition = messageLock.newCondition()
     private val messageIdList = ArrayList<Int>()
-    override fun onRequest(reqId: Int, bf: ByteArray, size: Int): Boolean {
+    override fun onRequest(resId: Int, reqId: Int, bf: ByteArray, size: Int): Boolean {
         messageLock.withLock {
-            messageIdList.add(reqId)
+            messageIdList.add(resId)
             messageCondition.signalAll()
         }
         return true
@@ -36,9 +36,9 @@ abstract class ChatBridge: RequestBridge() {
     private val replayLock = ReentrantLock()
     private val replayCondition = replayLock.newCondition()
     private val replayIdList = ArrayList<Int>()
-    override fun onResponse(reqId: Int, bf: ByteArray, size: Int): Boolean {
+    override fun onResponse(resId: Int, bf: ByteArray, size: Int): Boolean {
         replayLock.withLock {
-            replayIdList.add(reqId)
+            replayIdList.add(resId)
             replayCondition.signalAll()
         }
         return true
@@ -58,10 +58,8 @@ abstract class ChatBridge: RequestBridge() {
     }
 
     private fun clearMessages() {
-        messageIdList.clear()
-        clearRequests(); clearResponse()
-        messageLock.withLock { messageCondition.signalAll() }
-        replayLock.withLock { replayCondition.signalAll() }
+        messageLock.withLock { messageIdList.clear(); messageCondition.signalAll() }
+        replayLock.withLock { replayIdList.clear(); replayCondition.signalAll() }
     }
 
     override fun startBridgeLooper(): Int {
@@ -81,7 +79,6 @@ abstract class ChatBridge: RequestBridge() {
                 else {
                     msgBuffer.putSString(0, msg)
                     brg.sendRequest(msgBuffer, 0, msg.length + 2)
-                    // println("\rMessage sent at ${System.currentTimeMillis()}")
                 }
             }
         }
@@ -91,7 +88,6 @@ abstract class ChatBridge: RequestBridge() {
                 val (_,msg) = brg.getAvailableMessage()
                 if(msg!=null){
                     print("\r$fromName: $msg\nYou: ")
-                    // at ${System.currentTimeMillis()}\nYou: ")
                 }
             }
         }
