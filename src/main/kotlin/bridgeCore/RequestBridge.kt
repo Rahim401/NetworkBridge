@@ -9,10 +9,6 @@ import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
 
 abstract class RequestBridge: Bridge() {
-    companion object {
-        const val RqByteSignal:Byte = 2; const val RqShortSignal:Byte = 3
-        const val ResByteSignal:Byte = 4; const val ResShortSignal:Byte = 5
-    }
     private val requestMap = HashMap<Int,ByteArray?>(2)
     private val requestMapLock = ReentrantLock()
     private val requestMapCondition = requestMapLock.newCondition()
@@ -21,6 +17,7 @@ abstract class RequestBridge: Bridge() {
     private val responseMapLock = ReentrantLock()
     private val responseMapCondition = responseMapLock.newCondition()
 
+    protected open val sizeOfPacket = 65535
     protected open val limitOfResId = 256
     protected open val limitOfReqId = 1024
     protected open val sizeOfResId = 1
@@ -40,9 +37,9 @@ abstract class RequestBridge: Bridge() {
             }
             if (waitAndGet)
                 responseMapCondition.await()
-            else break
+            else return ErrorByWaitLimitReached
         }
-        return -1
+        return ErrorByBridgeNotAlive
     }
     private fun releaseResId(resId: Int):ByteArray? {
         responseMapLock.lock()
@@ -62,9 +59,9 @@ abstract class RequestBridge: Bridge() {
             }
             if (waitAndGet)
                 requestMapCondition.await()
-            else break
+            else return ErrorByWaitLimitReached
         }
-        return -1
+        return ErrorByBridgeNotAlive
     }
     private fun releaseReqId(reqId: Int):ByteArray? {
         requestMapLock.lock()
@@ -113,8 +110,8 @@ abstract class RequestBridge: Bridge() {
     }
 
     fun sendRequest(bf:ByteArray, off:Int=0, len:Int=bf.size, willRespond:Boolean=false, waitAndSend:Boolean=true): Int {
-        if(!isBridgeAlive) return -1
-        else if(len >= 65535) return -2
+        if(!isBridgeAlive) return ErrorByBridgeNotAlive
+        else if(len >= sizeOfPacket) return ErrorByPacketSizeReached
 
         val resId:Int = if(willRespond) acquireResId(waitAndSend) else 0
         if(resId < 0) return resId
@@ -136,14 +133,14 @@ abstract class RequestBridge: Bridge() {
         }
         catch (e: IOException) {
             releaseResId(resId)
-            return -4
+            return ErrorByStreamClosed
         }
         return resId
     }
     fun sendResponse(resId:Int, bf:ByteArray, off:Int=0, len:Int=bf.size): Int {
-        if(!isBridgeAlive) return -1
-        else if(len >= 65535) return -2
-        else if(resId < 0) return -3
+        if(!isBridgeAlive) return ErrorByBridgeNotAlive
+        else if(len >= sizeOfPacket) return ErrorByPacketSizeReached
+        else if(resId < 0 || resId > limitOfResId) return ErrorByResponseIdInvalid
 
         try {
             sendData {
@@ -160,7 +157,10 @@ abstract class RequestBridge: Bridge() {
                 writeResId(outStream!!, resId)
             }
         }
-        catch (e: IOException){ return -4 }
+        catch (e: IOException) {
+            releaseResId(resId)
+            return ErrorByStreamClosed
+        }
         return resId
     }
 

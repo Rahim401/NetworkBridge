@@ -9,19 +9,8 @@ import java.io.OutputStream
 abstract class Bridge {
     companion object {
         const val defaultBeatInterval = 1000L
-
-        const val StartLooperSignal: Byte = 0
-        const val BeatSignal: Byte = 1
-        const val StopLooperSignal: Byte = -1
-
         const val StoppedBySelf = 0
         const val StoppedByPeer = 1
-        const val ErrorByBridgeAlreadyAlive = -1
-        const val ErrorByUnreliableConnection = -2
-        const val ErrorByNetworkTimeout = -3
-        const val ErrorByUnintendedSignal = -4
-        const val ErrorByStreamClosed = -5
-        const val ErrorByUnexpectedException = -6
     }
 
     protected var isBridgeAlive: Boolean = false
@@ -44,8 +33,7 @@ abstract class Bridge {
     protected var nextRBeatAt = System.currentTimeMillis() + confBeatInter
     protected open fun startBridgeLooper():Int {
         if(isBridgeAlive) return ErrorByBridgeAlreadyAlive // Because of Invalid State
-
-        var stoppedBecauseOf: Int = -1
+        var stoppedBecauseOf: Int = ErrorByUnexpectedException
         try {
             isBridgeAlive = true
             setTimeout(confBeatInterBy4)
@@ -117,7 +105,7 @@ abstract class Bridge {
                     }
                 }
                 if(!isBridgeAlive) stoppedBecauseOf = StoppedBySelf // Because of Self Stop
-            } else stoppedBecauseOf = ErrorByUnreliableConnection // Because of UnReliable Connection
+            } else stoppedBecauseOf = ErrorByUnintendedSignal // Because of UnReliable Connection
         }
         catch (e: IOException) { stoppedBecauseOf = ErrorByStreamClosed  } // Because of Stream Closed
         catch (e: Exception) { stoppedBecauseOf = ErrorByUnexpectedException } // Because of Unknown Error

@@ -113,7 +113,7 @@ class MasterBridge: StreamBridge() {
                         "create" -> {
                             val sockId = brg.makeAndConnStream()
                             if (sockId < 0) println("Error on creation occurred $sockId\n")
-                            else println("New stmObj $sockId created!\n")
+                            else println("New streamObject $sockId created!\n")
                         }
                         "write" -> {
                             val onSock = command.getOrNull(1)?.toInt()

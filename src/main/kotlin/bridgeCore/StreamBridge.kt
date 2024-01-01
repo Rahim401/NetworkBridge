@@ -12,21 +12,6 @@ import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
 
 abstract class StreamBridge: Bridge() {
-    companion object {
-        private const val MaxStreamLimit = 1024
-
-        const val MakeStmSignal:Byte = 6
-
-        const val ErrorByBridgeNotAlive = -1
-        const val ErrorByStreamLimitReached = -2
-        const val ErrorOnStreamCreation = -3
-        const val ErrorOnStreamConnection = -4
-        const val ErrorByStreamConnectionTimeout = -5
-        const val ErrorByStreamUnavailable = -6
-        const val ErrorByStreamClosed = -7
-        const val ErrorByUnexpectedException = -8
-    }
-
     var confMakeStmTimeout = confBeatInterBy4 / 2
     var confConnStmTimeout = confMakeStmTimeout / 5
 
@@ -36,6 +21,7 @@ abstract class StreamBridge: Bridge() {
 
     abstract fun makeStream(): DuplexStream?
 
+    protected open val limitForStreams = 1024
     override fun updateConfInters(inter:Long){
         super.updateConfInters(inter)
         confMakeStmTimeout = confBeatInterBy4 / 2
@@ -47,7 +33,7 @@ abstract class StreamBridge: Bridge() {
     }
     override fun handleSignal(signal: Byte, bf: ByteArray, size: Int) {
         if (signal==MakeStmSignal && size==4) makeStmLock.withLock {
-            if (stmList.size < MaxStreamLimit) {
+            if (stmList.size < limitForStreams) {
                 var stmObj: DuplexStream? = null; val parityBits = bf.getInt()
                 if(parityBits == stmList.size) try {
                     stmObj = makeStream()
@@ -82,7 +68,7 @@ abstract class StreamBridge: Bridge() {
     fun makeAndConnStream(willSignal:Boolean=false): Int {
         if(!isBridgeAlive) return ErrorByBridgeNotAlive
         makeStmLock.withLock {
-            if (stmList.size >= MaxStreamLimit)
+            if (stmList.size >= limitForStreams)
                 return ErrorByStreamLimitReached
             else {
                 var stmObj: DuplexStream? = null
@@ -109,7 +95,7 @@ abstract class StreamBridge: Bridge() {
                         ErrorOnStreamConnection
                     } else ErrorOnStreamCreation
                 }
-                catch (e: InterruptedIOException) { e.printStackTrace(); causeOfError = ErrorByStreamConnectionTimeout; }
+                catch (e: InterruptedIOException) { e.printStackTrace(); causeOfError = ErrorByConnectionTimeout; }
                 catch (e: IOException) { e.printStackTrace(); causeOfError = ErrorByStreamClosed; }
                 catch (e: Exception) { e.printStackTrace(); causeOfError = ErrorByUnexpectedException; }
                 stmObj?.releaseStream()
@@ -117,16 +103,12 @@ abstract class StreamBridge: Bridge() {
             }
         }
     }
-    fun isInStreamAvailable(stmId:Int) = stmId < stmList.size &&
-            stmList[stmId].isInStreamAvailable
-    fun isOutStreamAvailable(stmId:Int) = stmId < stmList.size &&
-            stmList[stmId].isOutStreamAvailable
-    fun setStreamTimeout(stmId: Int, timeout: Int) {
-        stmList.getOrNull(stmId)?.stmObj?.setTimeout(timeout)
-    }
+    fun isInStreamAvailable(stmId:Int) = stmId < stmList.size && stmList[stmId].isInStreamAvailable
+    fun isOutStreamAvailable(stmId:Int) = stmId < stmList.size && stmList[stmId].isOutStreamAvailable
+    fun setStreamTimeout(stmId: Int, timeout: Int) = stmList.getOrNull(stmId)?.streamObject?.setTimeout(timeout)
 
     fun acquireInStream(stmId:Int=-1, canCreate: Boolean=true, canWaitFor: Long=1000000000): Pair<Int, InputStream?> {
-        var causeOfError: Int = -1
+        var causeOfError: Int = ErrorByUnexpectedException
         makeStmLock.withLock {
             if (stmId < 0) {
                 stmList.forEachIndexed { idx, rStm ->
@@ -168,7 +150,7 @@ abstract class StreamBridge: Bridge() {
     }
 
     fun acquireOutStream(stmId:Int=-1, canCreate: Boolean=true, canWaitFor: Long=1000000000): Pair<Int, OutputStream?> {
-        var causeOfError: Int = -1
+        var causeOfError: Int = ErrorByUnexpectedException
         makeStmLock.withLock {
             if (stmId < 0) {
                 stmList.forEachIndexed { idx, rStm ->
@@ -210,7 +192,7 @@ abstract class StreamBridge: Bridge() {
     }
 
     private fun closeAllStreams() = makeStmLock.withLock {
-        stmList.forEach { it.stmObj.releaseStream() }
+        stmList.forEach { it.streamObject.releaseStream() }
         stmList.clear()
     }
 }

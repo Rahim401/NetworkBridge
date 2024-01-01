@@ -21,7 +21,7 @@ class SockStream(private val sock: Socket): DuplexStream {
         fun Socket.toSockStream() = SockStream(this)
     }
 }
-data class RentableStream(val stmObj: DuplexStream) {
+data class RentableStream(val streamObject: DuplexStream) {
     var isInStreamAvailable = true
         private set
     var isOutStreamAvailable = true
@@ -30,7 +30,7 @@ data class RentableStream(val stmObj: DuplexStream) {
     fun acquireInStream(): InputStream? = synchronized(this) {
         if (isInStreamAvailable) {
             isInStreamAvailable = false
-            return stmObj.inStream
+            return streamObject.inStream
         }
         return null
     }
@@ -39,7 +39,7 @@ data class RentableStream(val stmObj: DuplexStream) {
     fun acquireOutStream(): OutputStream? = synchronized(this) {
         if(isOutStreamAvailable){
             isOutStreamAvailable = false
-            return stmObj.outStream
+            return streamObject.outStream
         }
         return null
     }
