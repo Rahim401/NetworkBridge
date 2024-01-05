@@ -37,7 +37,7 @@ class WorkerBridge: RequestBridge() {
         get() = mainSocket?.remoteSocketAddress
     private var deviceTimeDiff = 0L
 
-    override val limitOfResId: Int = 5000
+    override val limitOfResId: Int = 1024
     override val limitOfReqId: Int = limitOfResId*2
     override val sizeOfResId: Int = 2
     override fun writeResId(outStm: OutputStream, resId: Int) = outStm.writeShort(resId)

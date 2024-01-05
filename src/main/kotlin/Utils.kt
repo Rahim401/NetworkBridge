@@ -1,5 +1,8 @@
 import java.io.*
 import java.nio.ByteBuffer
+import java.util.*
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.locks.Condition
 import kotlin.math.min
 
 
@@ -139,4 +142,13 @@ fun ByteArray.getSString(idx:Int=0) = decodeToString(idx+2,idx+2+getShort(idx))
 fun ByteBuffer.getUTF(pos:Int=position()) = array().decodeToString(pos,pos + short)
 fun String.toSArray() = ByteArray(length+2).apply {
     putSString(0,this@toSArray,length)
+}
+
+inline fun Condition.awaitTill(timeout:Long=Long.MAX_VALUE, till:()->Boolean) {
+    var timeLeft = TimeUnit.MILLISECONDS.toNanos(timeout)
+    while (timeLeft > 0 && till()) timeLeft = awaitNanos(timeLeft)
+}
+inline fun Condition.doAwaitTill(timeout:Long=Long.MAX_VALUE, till:()->Boolean) {
+    var timeLeft = TimeUnit.MILLISECONDS.toNanos(timeout)
+    while (till() && timeLeft > 0) timeLeft = awaitNanos(timeLeft)
 }

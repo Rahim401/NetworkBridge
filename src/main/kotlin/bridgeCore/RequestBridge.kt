@@ -1,10 +1,12 @@
 package bridgeCore
 
+import awaitTill
 import readUShort
 import toPInt
 import writeShort
 import java.io.IOException
 import java.io.OutputStream
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
 
@@ -27,45 +29,58 @@ abstract class RequestBridge: Bridge() {
     protected abstract fun onRequest(resId:Int, reqId:Int, bf:ByteArray, size: Int):Boolean
     protected abstract fun onResponse(resId:Int, bf:ByteArray, size: Int):Boolean
 
-    private fun acquireResId(waitAndGet:Boolean = false):Int = responseMapLock.withLock {
+    private var resIdUsedCount = 1; private var reqIdUsedCount = 0
+    private fun acquireResId(canWaitFor:Long=0):Int = responseMapLock.withLock {
+        var timeLeft = TimeUnit.MILLISECONDS.toNanos(canWaitFor)
         while (isBridgeAlive) {
-            for (id in 1 until limitOfResId) {
-                if (!responseMap.containsKey(id)) {
-                    responseMap[id] = null
-                    return id
+            if(resIdUsedCount < limitOfResId) {
+                for (id in 1 until limitOfResId) {
+                    if (!responseMap.containsKey(id)) {
+                        responseMap[id] = null
+                        resIdUsedCount++
+                        return id
+                    }
                 }
             }
-            if (waitAndGet)
-                responseMapCondition.await()
-            else return ErrorByWaitLimitReached
+            if (timeLeft > 0) timeLeft = responseMapCondition.awaitNanos(timeLeft)
+            else return@withLock ErrorByWaitLimitReached
         }
-        return ErrorByBridgeNotAlive
+        return@withLock ErrorByBridgeNotAlive
     }
     private fun releaseResId(resId: Int):ByteArray? {
         responseMapLock.lock()
-        try { return responseMap.remove(resId) }
+        try {
+            resIdUsedCount--
+            return responseMap.remove(resId)
+        }
         finally {
             responseMapCondition.signalAll()
             responseMapLock.unlock()
         }
     }
-    private fun acquireReqId(waitAndGet:Boolean = false):Int = requestMapLock.withLock {
+    private fun acquireReqId(canWaitFor:Long=0):Int = requestMapLock.withLock {
+        var timeLeft = TimeUnit.MILLISECONDS.toNanos(canWaitFor)
         while (isBridgeAlive) {
-            for (id in 0 until limitOfReqId) {
-                if (!requestMap.containsKey(id)) {
-                    requestMap[id] = null
-                    return id
+            if(reqIdUsedCount < limitOfReqId) {
+                for (id in 0 until limitOfReqId) {
+                    if (!requestMap.containsKey(id)) {
+                        requestMap[id] = null
+                        reqIdUsedCount++
+                        return id
+                    }
                 }
             }
-            if (waitAndGet)
-                requestMapCondition.await()
-            else return ErrorByWaitLimitReached
+            if (timeLeft > 0) timeLeft = requestMapCondition.awaitNanos(timeLeft)
+            else return@withLock ErrorByWaitLimitReached
         }
-        return ErrorByBridgeNotAlive
+        return@withLock ErrorByBridgeNotAlive
     }
     private fun releaseReqId(reqId: Int):ByteArray? {
         requestMapLock.lock()
-        try { return requestMap.remove(reqId) }
+        try {
+            reqIdUsedCount--
+            return requestMap.remove(reqId)
+        }
         finally {
             requestMapCondition.signalAll()
             requestMapLock.unlock()
@@ -82,7 +97,7 @@ abstract class RequestBridge: Bridge() {
     override fun handleSignal(signal: Byte, bf: ByteArray, size: Int) {
         when(signal) {
             RqByteSignal,RqShortSignal -> {
-                val reqId = acquireReqId()
+                val reqId = acquireReqId(0L)
                 val dataSize = size - sizeOfResId
                 val resId = readResId(bf, dataSize)
                 if (onRequest(resId, reqId, bf, dataSize)) requestMapLock.withLock {
@@ -109,11 +124,11 @@ abstract class RequestBridge: Bridge() {
         return because
     }
 
-    fun sendRequest(bf:ByteArray, off:Int=0, len:Int=bf.size, willRespond:Boolean=false, waitAndSend:Boolean=true): Int {
+    fun sendRequest(bf:ByteArray, off:Int=0, len:Int=bf.size, willRespond:Boolean=false, canWaitFor:Long=Long.MAX_VALUE): Int {
         if(!isBridgeAlive) return ErrorByBridgeNotAlive
         else if(len >= sizeOfPacket) return ErrorByPacketSizeReached
 
-        val resId:Int = if(willRespond) acquireResId(waitAndSend) else 0
+        val resId:Int = if(willRespond) acquireResId(canWaitFor) else 0
         if(resId < 0) return resId
 
         try {
@@ -150,7 +165,7 @@ abstract class RequestBridge: Bridge() {
                     outStream!!.write(dataSecSize)
                 }
                 else {
-                    outStream!!.write(ResByteSignal.toInt())
+                    outStream!!.write(ResShortSignal.toInt())
                     outStream!!.writeShort(dataSecSize)
                 }
                 outStream!!.write(bf, off, len)
@@ -164,30 +179,24 @@ abstract class RequestBridge: Bridge() {
         return resId
     }
 
-    fun retrieveRequest(reqId:Int, canWaitFor:Long=1000000000):ByteArray? {
-        if(reqId > limitOfReqId) return null
+    fun retrieveRequest(reqId:Int, canWaitFor:Long=Long.MAX_VALUE):ByteArray? {
+        if(reqId <= 0 || reqId > limitOfReqId) return null
         requestMapLock.withLock {
             if(!requestMap.containsKey(reqId)) return null
-            else if(canWaitFor > 0L) {
-                var timeLeft = canWaitFor*1000000
-                while (
-                    isBridgeAlive && timeLeft > 0 &&
-                    requestMap.containsKey(reqId) && requestMap[reqId]==null
-                ) timeLeft = requestMapCondition.awaitNanos(timeLeft)
+            else if(canWaitFor > 0L) requestMapCondition.awaitTill(canWaitFor) {
+                isBridgeAlive && requestMap.containsKey(reqId) &&
+                        requestMap[reqId]==null
             }
             return releaseReqId(reqId)
         }
     }
-    fun retrieveResponse(resId:Int, canWaitFor:Long=1000000000):ByteArray? {
+    fun retrieveResponse(resId:Int, canWaitFor:Long=Long.MAX_VALUE):ByteArray? {
         if(resId <= 0 || resId > limitOfResId) return null
         responseMapLock.withLock {
             if(!responseMap.containsKey(resId)) return null
-            else if(canWaitFor > 0L) {
-                var timeLeft = canWaitFor*1000000
-                while (
-                    isBridgeAlive && timeLeft > 0 &&
-                    responseMap.containsKey(resId) && responseMap[resId]==null
-                ) timeLeft = responseMapCondition.awaitNanos(timeLeft)
+            else if(canWaitFor > 0L) responseMapCondition.awaitTill(canWaitFor) {
+                isBridgeAlive && responseMap.containsKey(resId) &&
+                        responseMap[resId]==null
             }
             return releaseResId(resId)
         }

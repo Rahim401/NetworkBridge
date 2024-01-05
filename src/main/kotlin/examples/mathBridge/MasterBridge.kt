@@ -36,7 +36,7 @@ class MasterBridge: RequestBridge() {
         get() = mainSocket?.remoteSocketAddress
     private var deviceTimeDiff = 0L
 
-    override val limitOfResId: Int = 5000
+    override val limitOfResId: Int = 1024
     override val limitOfReqId: Int = limitOfResId*2
     override val sizeOfResId: Int = 2
     override fun writeResId(outStm: OutputStream, resId: Int) = outStm.writeShort(resId)
@@ -93,6 +93,10 @@ class MasterBridge: RequestBridge() {
                         println("\tInvalid expression!")
                     else {
                         if (exp == "exit") break
+                        if (exp == "disconnect"){
+                            disconnect()
+                            break
+                        }
                         val delay = (command.getOrNull(1)
                             ?.trim()?.toIntOrNull()?.times(1000)) ?: 0
                         val resId = sendMathRequest(exp, delay)
@@ -179,8 +183,8 @@ fun main() {
     while (!bridge.isConnected) Thread.sleep(100)
 
     bridge.startMathCli()
-//    bridge.startStressTest {
-//        return@startStressTest Pair("$it*5",5000)
+//    bridge.startStressTest(10000) {
+//        return@startStressTest Pair("$it*5",1000)
 //    }
     bridge.joinResponses()
     bridge.disconnect()
