@@ -22,5 +22,6 @@ const val ErrorByStreamLimitReached = -9
 const val ErrorOnStreamCreation = -10
 const val ErrorOnStreamConnection = -11
 const val ErrorByStreamUnavailable = -12
+const val ErrorByStreamIdInvalid = -13
 const val ErrorByStreamClosed = -31
 const val ErrorByUnexpectedException = -32

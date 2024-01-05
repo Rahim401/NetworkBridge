@@ -9,6 +9,7 @@ import examples.listenConnectTimeout
 import examples.BridgeState
 import examples.InitializeCode
 import examples.streamBridge.MasterBridge.Companion.streamManagerCLI
+import examples.streamBridge.MasterBridge.Companion.stressTestStreams
 import getShort
 import writeData
 import java.io.DataInputStream
@@ -121,6 +122,7 @@ fun main() {
         repeat(20) {
             while (!bridge.isConnected) Thread.sleep(1)
             streamManagerCLI(bridge, bridge::isConnected)
+//            stressTestStreams(bridge, bridge::isConnected)
             while (bridge.isConnected) Thread.sleep(100)
         }
     }

@@ -8,11 +8,9 @@ import examples.listenConnectTimeout
 import examples.BridgeState
 import examples.InitializeCode
 import examples.streamBridge.MasterBridge.Companion.streamManagerCLI
+import examples.streamBridge.MasterBridge.Companion.stressTestStreams
 import writeData
-import java.io.DataInputStream
-import java.io.DataOutputStream
-import java.io.InputStream
-import java.io.OutputStream
+import java.io.*
 import java.net.*
 import java.util.*
 import java.util.concurrent.TimeoutException
@@ -113,19 +111,20 @@ class MasterBridge: StreamBridge() {
                         "create" -> {
                             val sockId = brg.makeAndConnStream()
                             if (sockId < 0) println("Error on creation occurred $sockId\n")
-                            else println("New streamObject $sockId created!\n")
+                            else println("New Sock($sockId) created!\n")
                         }
                         "write" -> {
                             val onSock = command.getOrNull(1)?.toInt()
                             if (onSock == null) println("Invalid SockId!\n")
-                            else if (!brg.isInStreamAvailable(onSock))
+                            else if (onSock >= 0 && !brg.isOutStreamAvailable(onSock))
                                 println("OutStream of Sock($onSock) is Unavailable!\n")
                             else {
                                 var noOfLastLnBreaks = 0
                                 val consoleInStream = System.`in`
                                 brg.withOutStream(onSock) { outIdx, outStream ->
-                                    if (outStream == null || outIdx != onSock) println("Error in acquiring OutStream!\n")
+                                    if (outStream == null) println("Error in acquiring OutStream!\n")
                                     else {
+                                        println("Writing on Stream of the Sock($outIdx)")
                                         while (isConnected()) {
                                             val charRead = consoleInStream.read()
                                             if (charRead == 10) {
@@ -144,14 +143,15 @@ class MasterBridge: StreamBridge() {
                         "read" -> {
                             val onSock = command.getOrNull(1)?.toInt()
                             if (onSock == null) println("Invalid SockId!\n")
-                            else if (!brg.isInStreamAvailable(onSock))
+                            else if (onSock >= 0 && !brg.isInStreamAvailable(onSock))
                                 println("InStream of Sock($onSock) is Unavailable!\n")
                             else {
                                 val consoleInStream = System.`in`
                                 brg.withInStream(onSock) { inIdx, inStream ->
-                                    if (inStream == null || inIdx != onSock) println("Error in acquiring InStream!\n")
+                                    if (inStream == null) println("Error in acquiring InStream!\n")
                                     else {
-                                        brg.setStreamTimeout(onSock, 100)
+                                        println("Reading from Stream of the Sock($inIdx)")
+                                        brg.setStreamTimeout(inIdx, 100)
                                         recvLoop@ while (isConnected()) {
                                             try {
                                                 val charRecv = inStream.read()
@@ -179,6 +179,43 @@ class MasterBridge: StreamBridge() {
             }
             catch (e:SocketException) { println("An Error occurred!\n") }
         }
+        fun stressTestStreams(brg: StreamBridge, isConnected:()->Boolean, testFor:Int=10000, streamTimeout:Int=0) {
+            while (!isConnected()) Thread.sleep(10)
+            val threadList = arrayListOf<Thread>()
+            repeat(testFor) {
+                threadList.add(
+                    thread {
+                        val stmId = if(it < 1000) -1 else it%1000
+                        brg.withInStream(stmId, waitToCreate=true) { inpIdx, inStream ->
+                            if(inStream==null) println("${System.currentTimeMillis()} ${Thread.currentThread().name} $it: Can't create for InStream with error $inpIdx")
+                            else {
+                                brg.withOutStream(inpIdx, waitToCreate=true) { outIdx, outStream ->
+                                    if(outStream==null) println("${System.currentTimeMillis()} ${Thread.currentThread().name} $inpIdx $outIdx: Can't create for OutStream with error $outIdx")
+                                    else {
+                                        brg.setStreamTimeout(inpIdx, streamTimeout)
+                                        var lastReplay = -1
+                                        try {
+                                            repeat(10) { pingCount ->
+                                                outStream.write(pingCount)
+                                                Thread.sleep(100)
+                                                lastReplay = inStream.read()
+                                            }
+                                            println("${System.currentTimeMillis()} ${Thread.currentThread().name} $inpIdx $outIdx: Completely Done!")
+                                        }
+                                        catch (e: InterruptedIOException) {
+                                            println("${System.currentTimeMillis()} ${Thread.currentThread().name} $inpIdx $outIdx: Timeout with $lastReplay!")
+                                        }
+                                        brg.setStreamTimeout(inpIdx, 0)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                )
+            }
+            for(i in 0 until threadList.size)
+                threadList.removeAt(0).join()
+        }
     }
 }
 
@@ -189,5 +226,6 @@ fun main() {
     bridge.connectTo("localhost")
     while (!bridge.isConnected) Thread.sleep(10)
     streamManagerCLI(bridge, bridge::isConnected)
+//    stressTestStreams(bridge, bridge::isConnected)
     bridge.disconnect()
 }
