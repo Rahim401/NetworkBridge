@@ -1,6 +1,5 @@
 package bridgeCore
 
-import awaitTill
 import doAwaitTill
 import getInt
 import putInt
@@ -104,7 +103,7 @@ abstract class StreamBridge: Bridge() {
                 }
                 return@doAwaitTill true
             }
-            return ErrorByStreamLimitReached
+            return ErrorByLimitReached
         }
     }
     fun isInStreamAvailable(stmId:Int) = 0 <= stmId && stmId < stmList.size && stmList[stmId].isInStreamAvailable
@@ -114,7 +113,7 @@ abstract class StreamBridge: Bridge() {
     fun acquireInStream(stmId:Int=-1, canCreate: Boolean=true, waitToCreate:Boolean=false, canWaitFor: Long=Long.MAX_VALUE): Pair<Int, InputStream?> {
         if(isBridgeAlive) makeStmLock.withLock {
             var resCode = ErrorByStreamUnavailable
-            makeStmCondition.doAwaitTill(canWaitFor) {
+            makeStmCondition.doAwaitTill(canWaitFor) { timeLeft ->
                 resCode = if(isBridgeAlive) {
                     if(stmId < 0) {
                         stmList.forEachIndexed { idx, rStm ->
@@ -123,7 +122,7 @@ abstract class StreamBridge: Bridge() {
                                 return@doAwaitTill false
                             }
                         }
-                        if (canCreate) makeAndConnStream(false)
+                        if (canCreate) makeAndConnStream(false, timeLeft)
                         else return@doAwaitTill true
                     }
                     else if(stmId < stmList.size) {
@@ -134,7 +133,7 @@ abstract class StreamBridge: Bridge() {
                         if (waitToCreate) return@doAwaitTill true
                         else ErrorByStreamUnavailable
                     }
-                    else ErrorByStreamIdInvalid
+                    else ErrorByInvalidId
                 }
                 else ErrorByBridgeNotAlive
                 return@doAwaitTill false
@@ -161,7 +160,7 @@ abstract class StreamBridge: Bridge() {
     fun acquireOutStream(stmId:Int=-1, canCreate: Boolean=true, waitToCreate:Boolean=false, canWaitFor: Long=Long.MAX_VALUE): Pair<Int, OutputStream?> {
         if(isBridgeAlive) makeStmLock.withLock {
             var resCode = ErrorByStreamUnavailable
-            makeStmCondition.doAwaitTill(canWaitFor) {
+            makeStmCondition.doAwaitTill(canWaitFor) { timeLeft ->
                 resCode = if(isBridgeAlive) {
                     if(stmId < 0) {
                         stmList.forEachIndexed { idx, rStm ->
@@ -170,7 +169,7 @@ abstract class StreamBridge: Bridge() {
                                 return@doAwaitTill false
                             }
                         }
-                        if (canCreate) makeAndConnStream(false)
+                        if (canCreate)  makeAndConnStream(false, timeLeft)
                         else return@doAwaitTill true
                     }
                     else if(stmId < stmList.size) {
@@ -181,7 +180,7 @@ abstract class StreamBridge: Bridge() {
                         if (waitToCreate) return@doAwaitTill true
                         else ErrorByStreamUnavailable
                     }
-                    else ErrorByStreamIdInvalid
+                    else ErrorByInvalidId
                 }
                 else ErrorByBridgeNotAlive
                 return@doAwaitTill false

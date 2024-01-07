@@ -144,11 +144,11 @@ fun String.toSArray() = ByteArray(length+2).apply {
     putSString(0,this@toSArray,length)
 }
 
-inline fun Condition.awaitTill(timeout:Long=Long.MAX_VALUE, till:()->Boolean) {
+inline fun Condition.awaitTill(timeout:Long=Long.MAX_VALUE, till:(Long)->Boolean) {
     var timeLeft = TimeUnit.MILLISECONDS.toNanos(timeout)
-    while (timeLeft > 0 && till()) timeLeft = awaitNanos(timeLeft)
+    while (timeLeft > 0 && till(timeLeft)) timeLeft = awaitNanos(timeLeft)
 }
-inline fun Condition.doAwaitTill(timeout:Long=Long.MAX_VALUE, till:()->Boolean) {
+inline fun Condition.doAwaitTill(timeout:Long=Long.MAX_VALUE, till:(Long)->Boolean) {
     var timeLeft = TimeUnit.MILLISECONDS.toNanos(timeout)
-    while (till() && timeLeft > 0) timeLeft = awaitNanos(timeLeft)
+    while (till(timeLeft) && timeLeft > 0) timeLeft = awaitNanos(timeLeft)
 }

@@ -43,7 +43,7 @@ abstract class RequestBridge: Bridge() {
                 }
             }
             if (timeLeft > 0) timeLeft = responseMapCondition.awaitNanos(timeLeft)
-            else return@withLock ErrorByWaitLimitReached
+            else return@withLock ErrorByLimitReached
         }
         return@withLock ErrorByBridgeNotAlive
     }
@@ -71,7 +71,7 @@ abstract class RequestBridge: Bridge() {
                 }
             }
             if (timeLeft > 0) timeLeft = requestMapCondition.awaitNanos(timeLeft)
-            else return@withLock ErrorByWaitLimitReached
+            else return@withLock ErrorByLimitReached
         }
         return@withLock ErrorByBridgeNotAlive
     }
@@ -126,7 +126,7 @@ abstract class RequestBridge: Bridge() {
 
     fun sendRequest(bf:ByteArray, off:Int=0, len:Int=bf.size, willRespond:Boolean=false, canWaitFor:Long=Long.MAX_VALUE): Int {
         if(!isBridgeAlive) return ErrorByBridgeNotAlive
-        else if(len >= sizeOfPacket) return ErrorByPacketSizeReached
+        else if(len < 0 || len >= sizeOfPacket) return ErrorByDataSizeExceeded
 
         val resId:Int = if(willRespond) acquireResId(canWaitFor) else 0
         if(resId < 0) return resId
@@ -154,8 +154,8 @@ abstract class RequestBridge: Bridge() {
     }
     fun sendResponse(resId:Int, bf:ByteArray, off:Int=0, len:Int=bf.size): Int {
         if(!isBridgeAlive) return ErrorByBridgeNotAlive
-        else if(len >= sizeOfPacket) return ErrorByPacketSizeReached
-        else if(resId < 0 || resId > limitOfResId) return ErrorByResponseIdInvalid
+        else if(len >= sizeOfPacket) return ErrorByDataSizeExceeded
+        else if(resId < 0 || resId > limitOfResId) return ErrorByInvalidId
 
         try {
             sendData {
