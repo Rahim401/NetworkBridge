@@ -76,42 +76,43 @@ abstract class StreamBridge: Bridge() {
 
     fun makeAndConnStream(willSignal:Boolean=true, canWaitFor: Long=Long.MAX_VALUE): Int {
         if(!isBridgeAlive) return ErrorByBridgeNotAlive
+        else if(stmList.size >= limitForStreams) return ErrorByLimitReached
         makeStmLock.withLock {
             makeStmCondition.doAwaitTill(canWaitFor) {
-                if (stmList.size < limitForStreams) {
-                    var stmObj: DuplexStream? = null
-                    var causeOfError: Int
-                    val parityBits = stmList.size
-                    val dataBuffer = ByteArray(4)
-                    dataBuffer.putInt(0, parityBits)
-                    try {
-                        sendData { writeData(MakeStmSignal, parityBits) }
-                        stmObj = makeStream()
-                        causeOfError = if (stmObj != null) {
-                            stmObj.outStream.write(dataBuffer)
+                if(!isBridgeAlive) return ErrorByBridgeNotAlive
+                else if(stmList.size >= limitForStreams) return ErrorByLimitReached
 
-                            stmObj.setTimeout(confConnStmTimeout.toInt())
-                            if (stmObj.inStream.readNBytes(dataBuffer, 0, 4) == 4) {
-                                val actualBits = dataBuffer.getInt()
-                                if (actualBits == parityBits) {
-                                    stmObj.setTimeout(0)
-                                    stmList.add(RentableStream(stmObj))
-                                    if (willSignal) makeStmCondition.signalAll()
-                                    return stmList.size - 1
-                                }
+                var causeOfError: Int
+                var stmObj: DuplexStream? = null
+                val parityBits = stmList.size
+                val dataBuffer = ByteArray(4)
+                dataBuffer.putInt(0, parityBits)
+                try {
+                    sendData { writeData(MakeStmSignal, parityBits) }
+                    stmObj = makeStream()
+                    causeOfError = if (stmObj != null) {
+                        stmObj.outStream.write(dataBuffer)
+
+                        stmObj.setTimeout(confConnStmTimeout.toInt())
+                        if (stmObj.inStream.readNBytes(dataBuffer, 0, 4) == 4) {
+                            val actualBits = dataBuffer.getInt()
+                            if (actualBits == parityBits) {
+                                stmObj.setTimeout(0)
+                                stmList.add(RentableStream(stmObj))
+                                if (willSignal) makeStmCondition.signalAll()
+                                return stmList.size - 1
                             }
-                            ErrorOnStreamConnection
-                        } else ErrorOnStreamCreation
-                    }
-                    catch (e: InterruptedIOException) { e.printStackTrace(); causeOfError = ErrorByConnectionTimeout; }
-                    catch (e: IOException) { e.printStackTrace(); causeOfError = ErrorByStreamClosed; }
-                    catch (e: Exception) { e.printStackTrace(); causeOfError = ErrorByUnexpectedException; }
-                    stmObj?.releaseStream()
-                    return causeOfError
+                        }
+                        ErrorOnStreamConnection
+                    } else ErrorOnStreamCreation
                 }
-                return@doAwaitTill true
+                catch (e: InterruptedIOException) { e.printStackTrace(); causeOfError = ErrorByConnectionTimeout; }
+                catch (e: IOException) { e.printStackTrace(); causeOfError = ErrorByStreamClosed; }
+                catch (e: Exception) { e.printStackTrace(); causeOfError = ErrorByUnexpectedException; }
+                stmObj?.releaseStream()
+                return causeOfError
             }
-            return ErrorByLimitReached
+            return ErrorByUnexpectedException
         }
     }
     fun isInStreamAvailable(stmId:Int) = 0 <= stmId && stmId < stmList.size && stmList[stmId].isInStreamAvailable
