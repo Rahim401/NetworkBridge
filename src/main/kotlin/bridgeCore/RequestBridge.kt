@@ -179,7 +179,7 @@ abstract class RequestBridge: Bridge() {
      * @param canWaitFor amount of time it can wait for some request to response in milliseconds
      * @return if sent returns `resId` which can be later used to retrieve response, else returns error code
      */
-    fun sendRequest(bf:ByteArray, off:Int=0, len:Int=bf.size, willRespond:Boolean=false, canWaitFor:Long=Long.MAX_VALUE): Int {
+    protected open fun sendRequest(bf:ByteArray, off:Int=0, len:Int=bf.size, willRespond:Boolean=false, canWaitFor:Long=Long.MAX_VALUE): Int {
         if(!isBridgeAlive) return ErrorByBridgeNotAlive
         else if(len < 0 || len >= sizeOfPacket) return ErrorByDataSizeExceeded
 
@@ -215,7 +215,7 @@ abstract class RequestBridge: Bridge() {
      * @param len size of the data in buffer
      * @return if sent returns the same `resId`, else returns error code
      */
-    fun sendResponse(resId:Int, bf:ByteArray, off:Int=0, len:Int=bf.size): Int {
+    protected open fun sendResponse(resId:Int, bf:ByteArray, off:Int=0, len:Int=bf.size): Int {
         if(!isBridgeAlive) return ErrorByBridgeNotAlive
         else if(len >= sizeOfPacket) return ErrorByDataSizeExceeded
         else if(resId < 0 || resId > limitOfResId) return ErrorByInvalidId
@@ -249,8 +249,8 @@ abstract class RequestBridge: Bridge() {
      * @param canWaitFor amount of time it can wait for arrival of request
      * @return Request Data in bytearray
      */
-    fun retrieveRequest(reqId:Int, canWaitFor:Long=Long.MAX_VALUE):ByteArray? {
-        if(reqId <= 0 || reqId > limitOfReqId) return null
+    protected open fun retrieveRequest(reqId:Int, canWaitFor:Long=Long.MAX_VALUE):ByteArray? {
+        if(reqId < 0 || reqId > limitOfReqId) return null
         requestMapLock.withLock {
             if(!requestMap.containsKey(reqId)) return null
             else if(canWaitFor > 0L) requestMapCondition.awaitTill(canWaitFor) {
@@ -266,7 +266,7 @@ abstract class RequestBridge: Bridge() {
      * @param canWaitFor amount of time it can wait for arrival of response
      * @return Response Data in bytearray
      */
-    fun retrieveResponse(resId:Int, canWaitFor:Long=Long.MAX_VALUE):ByteArray? {
+    protected open fun retrieveResponse(resId:Int, canWaitFor:Long=Long.MAX_VALUE):ByteArray? {
         if(resId <= 0 || resId > limitOfResId) return null
         responseMapLock.withLock {
             if(!responseMap.containsKey(resId)) return null
@@ -281,7 +281,7 @@ abstract class RequestBridge: Bridge() {
     /**
      * Method which will wait till all the request get response
      */
-    fun joinResponses() = responseMapLock.withLock {
+    protected open fun joinResponses() = responseMapLock.withLock {
         while (isBridgeAlive) {
             if (responseMap.isEmpty())
                 return

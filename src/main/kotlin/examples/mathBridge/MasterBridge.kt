@@ -181,6 +181,9 @@ class MasterBridge: RequestBridge() {
         mainSocket?.close(); mainSocket = null; inStream = null; outStream = null
         currentState = BridgeState.Idle
     }
+
+    fun waitForAllResults() = joinResponses()
+
     fun disconnect(){
         if(currentState == BridgeState.Connected || currentState == BridgeState.Connecting) {
             currentState = BridgeState.Disconnecting
@@ -198,6 +201,6 @@ fun main() {
 //    bridge.startStressTest(10000) {
 //        return@startStressTest Pair("$it*5",1000)
 //    }
-    bridge.joinResponses()
+    bridge.waitForAllResults()
     bridge.disconnect()
 }
