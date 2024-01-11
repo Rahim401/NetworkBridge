@@ -30,6 +30,10 @@ import java.util.*
 import java.util.concurrent.TimeoutException
 import kotlin.concurrent.thread
 
+/**
+ * This is an Server-Client implementation of Request bridge, to compute maths. Here this is the Server,
+ * which will compute math expressions sent by ClientBridge and sends the result back
+ */
 class MasterBridge: RequestBridge() {
     var currentState = BridgeState.Idle
         private set

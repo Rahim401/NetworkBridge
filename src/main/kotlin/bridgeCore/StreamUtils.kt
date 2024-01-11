@@ -12,6 +12,10 @@ import java.io.InputStream
 import java.io.OutputStream
 import java.net.Socket
 
+/**
+ * Defines an interface for a bidirectional communication channel.
+ * It includes input and output streams along with methods to set a timeout and release resources.
+ */
 interface DuplexStream {
     val inStream: InputStream
     val outStream: OutputStream
@@ -19,6 +23,9 @@ interface DuplexStream {
     fun releaseStream()
 }
 
+/**
+ * An Bidirectional communication channel based on Tcp Sockets
+ */
 class SockStream(private val sock: Socket): DuplexStream {
     override val inStream: InputStream = sock.getInputStream()
     override val outStream: OutputStream = sock.getOutputStream()
@@ -29,6 +36,10 @@ class SockStream(private val sock: Socket): DuplexStream {
         fun Socket.toSockStream() = SockStream(this)
     }
 }
+
+/**
+ * An dataclass which keeps track of stream availability
+ */
 data class RentableStream(val streamObject: DuplexStream) {
     var isInStreamAvailable = true
         private set

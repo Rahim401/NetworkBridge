@@ -16,6 +16,10 @@ import java.util.concurrent.locks.ReentrantLock
 import kotlin.collections.ArrayList
 import kotlin.concurrent.withLock
 
+/**
+ * An abstract class on top of Request bridge to send and receive message simultaneously
+ * in a thread-safe way
+ */
 abstract class ChatBridge: RequestBridge() {
     private val messageLock = ReentrantLock()
     private val messageCondition = messageLock.newCondition()

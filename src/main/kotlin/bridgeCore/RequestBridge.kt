@@ -18,6 +18,14 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
 
+/**
+ * This abstract class on top of `Bridge` provides way to Send and Receive Request or Response
+ * by blocking or with callback in a thread safe way
+ * - **Response Id** is the id which is generated in the Requesting Side, to map Request to a Response.
+ * It will be in range of 1 to `limitOfResId` and 0 is used if Request doesn't needed to be responded
+ * - **Request Id** is a temporary id generated on the serving side, only to retrieve Request from other thread.
+ * Will be in range of 0 to `limitOfReqId`
+ */
 abstract class RequestBridge: Bridge() {
     private val requestMap = HashMap<Int,ByteArray?>(2)
     private val requestMapLock = ReentrantLock()
@@ -27,14 +35,41 @@ abstract class RequestBridge: Bridge() {
     private val responseMapLock = ReentrantLock()
     private val responseMapCondition = responseMapLock.newCondition()
 
+    /** Max amount of data in bytes that can be sent in a Packet */
     protected open val sizeOfPacket = 65535
+    /**
+     * The actual size a ResponseId will occupy in a Packet in bytes,
+     * So `limitOfResId` will be dependent of it
+     */
+    protected open val sizeOfResId = 1
+
+    /**
+     * If you need to increase `limitOfResId`, you need to override `sizeOfResId`, `writeResId`, `readResId` accordingly,
+     * So that it can carry the ResponseId properly without truncations
+     */
     protected open val limitOfResId = 256
     protected open val limitOfReqId = 1024
-    protected open val sizeOfResId = 1
     protected open fun writeResId(outStm:OutputStream, resId:Int) = outStm.write(resId)
     protected open fun readResId(bf:ByteArray, pos:Int) = bf[pos].toPInt()
 
+    /**
+     * The callback will be called on a Request, Which need to handled and
+     * decide weather or not to cache the Request for retrieval from other threads
+     * @param resId id for which response need to be sent, will be 0 if it need not to be responded
+     * @param reqId temporary Id which needed to be used to retrieve this request if cached
+     * @param bf an temporary buffer with the data of the request
+     * @param size size of the request data
+     * @return true if request needed to be cached
+     */
     protected abstract fun onRequest(resId:Int, reqId:Int, bf:ByteArray, size: Int):Boolean
+    /**
+     * The callback will be called on a Response, Which need to handled and
+     * decide weather or not to cache the Response for retrieval from other threads
+     * @param resId id for which request was sent
+     * @param bf an temporary buffer with the data of the response
+     * @param size size of the response data
+     * @return true if response needed to be cached
+     */
     protected abstract fun onResponse(resId:Int, bf:ByteArray, size: Int):Boolean
 
     private var resIdUsedCount = 1; private var reqIdUsedCount = 0
@@ -132,6 +167,18 @@ abstract class RequestBridge: Bridge() {
         return because
     }
 
+    /**
+     * Method to send an Request to the Peer. At a time it can only wait for `limitOfResId` no
+     * of Response, if you requesting more than that it need to wait for response from some other request before
+     * sending this request
+     *
+     * @param bf an buffer with the data of the request
+     * @param off the offset of data in buffer
+     * @param len size of the data in buffer
+     * @param willRespond weather the request demands response
+     * @param canWaitFor amount of time it can wait for some request to response in milliseconds
+     * @return if sent returns `resId` which can be later used to retrieve response, else returns error code
+     */
     fun sendRequest(bf:ByteArray, off:Int=0, len:Int=bf.size, willRespond:Boolean=false, canWaitFor:Long=Long.MAX_VALUE): Int {
         if(!isBridgeAlive) return ErrorByBridgeNotAlive
         else if(len < 0 || len >= sizeOfPacket) return ErrorByDataSizeExceeded
@@ -160,6 +207,14 @@ abstract class RequestBridge: Bridge() {
         }
         return resId
     }
+    /**
+     * Method to send an Response to the Peer.
+     * @param resId id for which request we are responding
+     * @param bf an buffer with the data of the request
+     * @param off the offset of data in buffer
+     * @param len size of the data in buffer
+     * @return if sent returns the same `resId`, else returns error code
+     */
     fun sendResponse(resId:Int, bf:ByteArray, off:Int=0, len:Int=bf.size): Int {
         if(!isBridgeAlive) return ErrorByBridgeNotAlive
         else if(len >= sizeOfPacket) return ErrorByDataSizeExceeded
@@ -187,6 +242,13 @@ abstract class RequestBridge: Bridge() {
         return resId
     }
 
+
+    /**
+     * Method to wait and retrieve the cached Request
+     * @param reqId id of which Request it gonna retrieve
+     * @param canWaitFor amount of time it can wait for arrival of request
+     * @return Request Data in bytearray
+     */
     fun retrieveRequest(reqId:Int, canWaitFor:Long=Long.MAX_VALUE):ByteArray? {
         if(reqId <= 0 || reqId > limitOfReqId) return null
         requestMapLock.withLock {
@@ -198,6 +260,12 @@ abstract class RequestBridge: Bridge() {
             return releaseReqId(reqId)
         }
     }
+    /**
+     * Method to wait and retrieve the cached Response
+     * @param resId id of which Response it gonna retrieve
+     * @param canWaitFor amount of time it can wait for arrival of response
+     * @return Response Data in bytearray
+     */
     fun retrieveResponse(resId:Int, canWaitFor:Long=Long.MAX_VALUE):ByteArray? {
         if(resId <= 0 || resId > limitOfResId) return null
         responseMapLock.withLock {
@@ -210,6 +278,9 @@ abstract class RequestBridge: Bridge() {
         }
     }
 
+    /**
+     * Method which will wait till all the request get response
+     */
     fun joinResponses() = responseMapLock.withLock {
         while (isBridgeAlive) {
             if (responseMap.isEmpty())

@@ -24,6 +24,10 @@ import java.util.*
 import java.util.concurrent.TimeoutException
 import kotlin.concurrent.thread
 
+/**
+ * This is an P2P implementation of StreamBridge on Tcp, where we can create, read, write
+ * multiple streams with a Command line interface
+ */
 class MasterBridge: StreamBridge() {
     var currentState = BridgeState.Idle
         private set

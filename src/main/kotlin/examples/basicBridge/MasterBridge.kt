@@ -23,6 +23,9 @@ import java.net.*
 import java.util.concurrent.TimeoutException
 import kotlin.concurrent.thread
 
+/**
+ * This is a basic Master-Slave implementation of Bridge with Tcp Streams
+ */
 class MasterBridge: Bridge() {
     var currentState = BridgeState.Idle
         private set

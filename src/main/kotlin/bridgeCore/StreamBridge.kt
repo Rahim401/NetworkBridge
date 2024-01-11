@@ -16,10 +16,14 @@ import java.io.IOException
 import java.io.InputStream
 import java.io.InterruptedIOException
 import java.io.OutputStream
-import java.lang.Exception
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
 
+/**
+ * This is also an abstract class on top of `Bridge` which provides thread safe way
+ * to Create and Manage Multiple Streams in a efficient and reusable way
+ * - **Stream Id** is the id used to acquire in/output stream of a specific `DuplexStream`
+ */
 abstract class StreamBridge: Bridge() {
     var confMakeStmTimeout = confBeatInterBy4 / 2
     var confConnStmTimeout = confMakeStmTimeout / 5
@@ -28,14 +32,21 @@ abstract class StreamBridge: Bridge() {
     private val makeStmCondition = makeStmLock.newCondition()
     private var stmList:ArrayList<RentableStream> = ArrayList()
 
-    abstract fun makeStream(): DuplexStream?
-
-    protected open val limitForStreams = 1024
     override fun updateConfInters(inter:Long){
         super.updateConfInters(inter)
         confMakeStmTimeout = confBeatInterBy4 / 2
         confConnStmTimeout = confMakeStmTimeout / 5
     }
+
+    /**
+     * No of max streams that can be created
+     */
+    protected open val limitForStreams = 1024
+    /**
+     * A method which need to create and return a BiDirectional Channel
+     */
+    abstract fun makeStream(): DuplexStream?
+
     override fun getSignalSize(signal: Byte): Int {
         if (signal==MakeStmSignal) return 4
         return -1
@@ -68,12 +79,18 @@ abstract class StreamBridge: Bridge() {
             }
         }
     }
+
     override fun startBridgeLooper(): Int {
         val res = super.startBridgeLooper()
         closeAllStreams()
         return res
     }
 
+    /**
+     * A method which create and validate the streams on demand
+     * @param willSignal true if need to notify all other threads waiting for a stream
+     * @param canWaitFor amount of time it can wait for a stream creation in milliseconds
+     */
     fun makeAndConnStream(willSignal:Boolean=true, canWaitFor: Long=Long.MAX_VALUE): Int {
         if(!isBridgeAlive) return ErrorByBridgeNotAlive
         else if(stmList.size >= limitForStreams) return ErrorByLimitReached
@@ -119,6 +136,14 @@ abstract class StreamBridge: Bridge() {
     fun isOutStreamAvailable(stmId:Int) = 0 <= stmId && stmId < stmList.size && stmList[stmId].isOutStreamAvailable
     fun setStreamTimeout(stmId: Int, timeout: Int) = stmList.getOrNull(stmId)?.streamObject?.setTimeout(timeout)
 
+    /**
+     * Acquires and returns a InputStream, remember once the usage of stream finished you need to
+     * release it with `releaseInStream`, So that it can be reused
+     * @param stmId id of the stream needed to be acquired, -1 if need to acquire any available stream
+     * @param canCreate weather can it create new Stream if all existing streams are busy
+     * @param waitToCreate weather can it wait for creation if stream of `stmId` currently not exists
+     * @param canWaitFor amount of time it can wait for the creation of the Stream
+     */
     fun acquireInStream(stmId:Int=-1, canCreate: Boolean=true, waitToCreate:Boolean=false, canWaitFor: Long=Long.MAX_VALUE): Pair<Int, InputStream?> {
         if(isBridgeAlive) makeStmLock.withLock {
             var resCode = ErrorByStreamUnavailable
@@ -151,12 +176,14 @@ abstract class StreamBridge: Bridge() {
         }
         return Pair(ErrorByBridgeNotAlive, null)
     }
+    /** Release an InputStream */
     fun releaseInStream(stmId:Int=-1) {
         if(0 <= stmId && stmId < stmList.size) makeStmLock.withLock {
             stmList.getOrNull(stmId)?.releaseInStream()
             makeStmCondition.signalAll()
         }
     }
+    /** Execute a code with InputStream acquired */
     inline fun withInStream(
         stmId:Int=-1, canCreate: Boolean=true, waitToCreate: Boolean=false, canWaitFor: Long=Long.MAX_VALUE,
         block:(inpIdx:Int, inStream: InputStream?)->Unit
@@ -166,6 +193,15 @@ abstract class StreamBridge: Bridge() {
         releaseInStream(inpIdx)
     }
 
+
+    /**
+     * Acquires and returns a OutStream, remember once the usage of stream finished you need to
+     * release it with `releaseOutStream`, So that it can be reused
+     * @param stmId id of the stream needed to be acquired, -1 if need to acquire any available stream
+     * @param canCreate weather can it create new Stream if all existing streams are busy
+     * @param waitToCreate weather can it wait for creation if stream of `stmId` currently not exists
+     * @param canWaitFor amount of time it can wait for the creation of the Stream
+     */
     fun acquireOutStream(stmId:Int=-1, canCreate: Boolean=true, waitToCreate:Boolean=false, canWaitFor: Long=Long.MAX_VALUE): Pair<Int, OutputStream?> {
         if(isBridgeAlive) makeStmLock.withLock {
             var resCode = ErrorByStreamUnavailable
@@ -198,12 +234,14 @@ abstract class StreamBridge: Bridge() {
         }
         return Pair(ErrorByBridgeNotAlive, null)
     }
+    /** Release an OutputStream */
     fun releaseOutStream(stmId:Int=-1) {
         if(0 <= stmId && stmId < stmList.size) makeStmLock.withLock {
             stmList.getOrNull(stmId)?.releaseOutStream()
             makeStmCondition.signalAll()
         }
     }
+    /** Execute a code with OutputStream acquired */
     inline fun withOutStream(
         stmId:Int=-1, canCreate: Boolean=true, waitToCreate: Boolean=false, canWaitFor: Long=Long.MAX_VALUE,
         block:(outIdx:Int, outStream: OutputStream?)->Unit
